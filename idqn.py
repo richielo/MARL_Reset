@@ -1,6 +1,6 @@
 import collections
 import random
-
+import sys
 import gym
 import numpy as np
 import torch
@@ -8,8 +8,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from ma_gym.wrappers import Monitor
+import argparse
+from utils.file_utils import *
+from utils.learning_utils import *
+from envs import make_one_env, make_vec_envs
+from wrappers import RecordEpisodeStatistics, SquashDones, GlobalizeReward, FlattenObservation
 
-USE_WANDB = True  # if enabled, logs data on wandb server
+USE_WANDB = False  # if enabled, logs data on wandb server
 
 
 class ReplayBuffer:
@@ -98,10 +103,39 @@ def test(env, num_episodes, q):
     return sum(score / num_episodes)
 
 
-def main(env_name, lr, gamma, batch_size, buffer_limit, log_interval, max_episodes,
+def main(algo, seed, env_configs, env_name, lr, gamma, batch_size, buffer_limit, log_interval, max_episodes,
          max_epsilon, min_epsilon, test_episodes, warm_up_steps, update_iter, monitor=False):
-    env = gym.make(env_name)
-    test_env = gym.make(env_name)
+
+    """
+    Unused code to use vectorized environment
+    """
+    # num_processes  = 12 
+    # wrappers = tuple([RecordEpisodeStatistics, SquashDones, FlattenObservation])
+    # use_dummy_venv = False
+
+
+    # envs = make_vec_envs(
+    #     env_configs['env_name'],
+    #     env_configs,
+    #     seed,
+    #     dummy_vecenv,
+    #     num_processes,
+    #     env_configs["time_limit"] if "time_limit" in env_configs.keys() else time_limit,
+    #     wrappers,
+    #     algorithm["device"],
+    #     env_properties= algorithm['env_properties']
+    # )
+
+
+    # Setting seed
+    set_seed(seed)
+
+    # Init env 
+    env = make_one_env(env_name, env_configs, seed)
+    test_env = make_one_env(env_name, env_configs, seed)
+    # env = gym.make(env_name)
+    # test_env = gym.make(env_name)
+    
     if monitor:
         test_env = Monitor(test_env, directory='recordings/idqn/{}'.format(env_name),
                            video_callable=lambda episode_id: episode_id % 50 == 0)
@@ -117,6 +151,8 @@ def main(env_name, lr, gamma, batch_size, buffer_limit, log_interval, max_episod
         epsilon = max(min_epsilon, max_epsilon - (max_epsilon - min_epsilon) * (episode_i / (0.4 * max_episodes)))
         state = env.reset()
         done = [False for _ in range(env.n_agents)]
+        # print("step")
+        # sys.stdout.flush()
         while not all(done):
             action = q.sample_action(torch.Tensor(state).unsqueeze(0), epsilon)[0].data.cpu().numpy().tolist()
             next_state, reward, done, info = env.step(action)
@@ -142,19 +178,17 @@ def main(env_name, lr, gamma, batch_size, buffer_limit, log_interval, max_episod
 
 
 if __name__ == '__main__':
-    kwargs = {'env_name': 'ma_gym:Switch2-v1',
-              'lr': 0.0005,
-              'batch_size': 32,
-              'gamma': 0.99,
-              'buffer_limit': 50000,
-              'log_interval': 20,
-              'max_episodes': 30000,
-              'max_epsilon': 0.9,
-              'min_epsilon': 0.1,
-              'test_episodes': 5,
-              'warm_up_steps': 2000,
-              'update_iter': 10,
-              'monitor': False}
+    parser = argparse.ArgumentParser(description='IDQN')
+    parser.add_argument('--config_path')
+    parser.add_argument('--seed', type=int)
+
+    args = parser.parse_args()
+
+    kwargs = parse_yaml(args.config_path)
+    kwargs['seed'] = args.seed
+
+    print(kwargs)
+
     if USE_WANDB:
         import wandb
 

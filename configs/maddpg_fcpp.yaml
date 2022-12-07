@@ -1,0 +1,25 @@
+env_name : 'FullCoopPredatorPreyWrapper7x7_pred4_prey2_p05_oai'
+algo : 'maddpg'
+lr_mu : 0.0005
+lr_q : 0.001
+tau : 0.005
+batch_size : 32
+gamma : 0.99
+buffer_limit : 50000
+log_interval : 20
+max_episodes : 30000
+test_episodes : 5
+warm_up_steps : 2000
+update_iter : 10
+gumbel_max_temp : 10
+gumbel_min_temp : 0.1
+env_configs: {time_limit: 200,
+              grid_size: 7,
+              num_agents: 4,
+              num_preys: 2,
+              penalty: -0.5,
+              prey_capture_reward: 10.0,
+              step_cost: -0.01,
+              other_agent_visible: False,
+              prey_move_probs:[0.175, 0.175, 0.175, 0.175, 0.3],
+}

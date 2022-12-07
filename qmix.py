@@ -1,3 +1,4 @@
+import sys
 import collections
 import gym
 import numpy as np
@@ -5,6 +6,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+import argparse
+from utils.file_utils import *
+from utils.learning_utils import *
+from envs import make_one_env, make_vec_envs
+from wrappers import RecordEpisodeStatistics, SquashDones, GlobalizeReward, FlattenObservation
+
 
 USE_WANDB = False  # if enabled, logs data on wandb server
 
@@ -180,12 +187,15 @@ def test(env, num_episodes, q):
     return score / num_episodes
 
 
-def main(env_name, lr, gamma, batch_size, buffer_limit, log_interval, max_episodes,
+def main(algo, seed, env_configs, env_name, lr, gamma, batch_size, buffer_limit, log_interval, max_episodes,
          max_epsilon, min_epsilon, test_episodes, warm_up_steps, update_iter, chunk_size,
          update_target_interval, recurrent):
-    # create env.
-    env = gym.make(env_name)
-    test_env = gym.make(env_name)
+    # Setting seed
+    set_seed(seed)
+
+    # Init env 
+    env = make_one_env(env_name, env_configs, seed)
+    test_env = make_one_env(env_name, env_configs, seed)
     memory = ReplayBuffer(buffer_limit)
 
     # create networks
@@ -204,6 +214,8 @@ def main(env_name, lr, gamma, batch_size, buffer_limit, log_interval, max_episod
         epsilon = max(min_epsilon, max_epsilon - (max_epsilon - min_epsilon) * (episode_i / (0.6 * max_episodes)))
         state = env.reset()
         done = [False for _ in range(env.n_agents)]
+        # print("qmix step")
+        # sys.stdout.flush()
         with torch.no_grad():
             hidden = q.init_hidden()
             while not all(done):
@@ -236,33 +248,41 @@ def main(env_name, lr, gamma, batch_size, buffer_limit, log_interval, max_episod
 
 
 if __name__ == '__main__':
-    # Lets gather arguments
-    import argparse
+    parser = argparse.ArgumentParser(description='QMIX')
+    parser.add_argument('--config_path')
+    parser.add_argument('--seed', type=int)
 
-    parser = argparse.ArgumentParser(description='Qmix')
-    parser.add_argument('--env-name', required=False, default='ma_gym:Checkers-v0')
-    parser.add_argument('--seed', type=int, default=1, required=False)
-    parser.add_argument('--no-recurrent', action='store_true')
-    parser.add_argument('--max-episodes', type=int, default=10000, required=False)
-
-    # Process arguments
     args = parser.parse_args()
 
-    kwargs = {'env_name': args.env_name,
-              'lr': 0.001,
-              'batch_size': 32,
-              'gamma': 0.99,
-              'buffer_limit': 50000,
-              'update_target_interval': 20,
-              'log_interval': 100,
-              'max_episodes': args.max_episodes,
-              'max_epsilon': 0.9,
-              'min_epsilon': 0.1,
-              'test_episodes': 5,
-              'warm_up_steps': 2000,
-              'update_iter': 10,
-              'chunk_size': 10,  # if not recurrent, internally, we use chunk_size of 1 and no gru cell is used.
-              'recurrent': not args.no_recurrent}
+    # parser = argparse.ArgumentParser(description='Qmix')
+    # parser.add_argument('--env-name', required=False, default='ma_gym:Checkers-v0')
+    # parser.add_argument('--seed', type=int, default=1, required=False)
+    # parser.add_argument('--no-recurrent', action='store_true')
+    # parser.add_argument('--max-episodes', type=int, default=10000, required=False)
+
+    # # Process arguments
+    # args = parser.parse_args()
+
+    # kwargs = {'env_name': args.env_name,
+    #           'lr': 0.001,
+    #           'batch_size': 32,
+    #           'gamma': 0.99,
+    #           'buffer_limit': 50000,
+    #           'update_target_interval': 20,
+    #           'log_interval': 100,
+    #           'max_episodes': args.max_episodes,
+    #           'max_epsilon': 0.9,
+    #           'min_epsilon': 0.1,
+    #           'test_episodes': 5,
+    #           'warm_up_steps': 2000,
+    #           'update_iter': 10,
+    #           'chunk_size': 10,  # if not recurrent, internally, we use chunk_size of 1 and no gru cell is used.
+    #           'recurrent': not args.no_recurrent}
+
+    kwargs = parse_yaml(args.config_path)
+    kwargs['seed'] = args.seed
+
+    print(kwargs)
 
     if USE_WANDB:
         import wandb

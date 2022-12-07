@@ -1,3 +1,4 @@
+import sys
 import gym
 import random
 import collections
@@ -7,8 +8,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from ma_gym.wrappers import Monitor
+import argparse
+from utils.file_utils import *
+from utils.learning_utils import *
+from envs import make_one_env, make_vec_envs
+from wrappers import RecordEpisodeStatistics, SquashDones, GlobalizeReward, FlattenObservation
 
-USE_WANDB = True  # if enabled, logs data on wandb server
+USE_WANDB = False  # if enabled, logs data on wandb server
 
 
 class ReplayBuffer:
@@ -135,10 +141,15 @@ def test(env, num_episodes, mu):
     return sum(score / num_episodes)
 
 
-def main(env_name, lr_mu, lr_q, tau, gamma, batch_size, buffer_limit, max_episodes, log_interval, test_episodes,
+def main(algo, seed, env_configs, env_name, lr_mu, lr_q, tau, gamma, batch_size, buffer_limit, max_episodes, log_interval, test_episodes,
          warm_up_steps, update_iter, gumbel_max_temp, gumbel_min_temp):
-    env = gym.make(env_name)
-    test_env = gym.make(env_name)
+    # Setting seed
+    set_seed(seed)
+
+    # Init env 
+    env = make_one_env(env_name, env_configs, seed)
+    test_env = make_one_env(env_name, env_configs, seed)
+
     # test_env = Monitor(test_env, directory='recordings',
     #                   video_callable=lambda episode_id: episode_id % test_episodes == 0)
     memory = ReplayBuffer(buffer_limit)
@@ -159,6 +170,8 @@ def main(env_name, lr_mu, lr_q, tau, gamma, batch_size, buffer_limit, max_episod
         state = env.reset()
         done = [False for _ in range(env.n_agents)]
         step_i = 0
+        # print("maddpg step")
+        # sys.stdout.flush()
         while not all(done):
             action_logits = mu(torch.Tensor(state).unsqueeze(0))
             action_one_hot = F.gumbel_softmax(logits=action_logits.squeeze(0), tau=temperature, hard=True)
@@ -194,20 +207,30 @@ def main(env_name, lr_mu, lr_q, tau, gamma, batch_size, buffer_limit, max_episod
 
 
 if __name__ == '__main__':
-    kwargs = {'env_name': 'ma_gym:Switch2-v2',
-              'lr_mu': 0.0005,
-              'lr_q': 0.001,
-              'batch_size': 32,
-              'tau': 0.005,
-              'gamma': 0.99,
-              'buffer_limit': 50000,
-              'log_interval': 20,
-              'max_episodes': 10000,
-              'test_episodes': 5,
-              'warm_up_steps': 2000,
-              'update_iter': 10,
-              'gumbel_max_temp': 10,
-              'gumbel_min_temp': 0.1}
+    parser = argparse.ArgumentParser(description='MADDPG')
+    parser.add_argument('--config_path')
+    parser.add_argument('--seed', type=int)
+
+    args = parser.parse_args()
+
+    # kwargs = {'env_name': 'ma_gym:Switch2-v2',
+    #           'lr_mu': 0.0005,
+    #           'lr_q': 0.001,
+    #           'batch_size': 32,
+    #           'tau': 0.005,
+    #           'gamma': 0.99,
+    #           'buffer_limit': 50000,
+    #           'log_interval': 20,
+    #           'max_episodes': 10000,
+    #           'test_episodes': 5,
+    #           'warm_up_steps': 2000,
+    #           'update_iter': 10,
+    #           'gumbel_max_temp': 10,
+    #           'gumbel_min_temp': 0.1}
+
+    kwargs = parse_yaml(args.config_path)
+    kwargs['seed'] = args.seed
+
     if USE_WANDB:
         import wandb
 
