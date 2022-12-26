@@ -12,47 +12,74 @@ import easydict
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecEnvWrapper
 from stable_baselines3.common.vec_env.vec_video_recorder import VecVideoRecorder
 from stable_baselines3.common.vec_env.vec_normalize import VecNormalize as VecNormalize_
-from wrappers import TimeLimit, Monitor, FlattenObservation
+from wrappers import TimeLimit, Monitor, FlattenObservation, RecordEpisodeStatistics, SquashDones, GlobalizeReward
 
 from mod_envs.pp_wrapper import *
 from mod_envs.tj_wrapper import *
+# from mod_envs.overcook_wrapper import OverCookedEnv
+from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
+from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
+import lbforaging
 
 # from vmas import make_env as vmas_make_env
 
-def make_one_env(env_name, env_configs, seed):
-    if('FullCoopPredatorPreyWrapper' in env_name):
-        env = FullCoopPredatorPreyWrapper(centralized = False, grid_shape = (env_configs['grid_size'], env_configs['grid_size']),
+WRAPPERS = [
+    RecordEpisodeStatistics,
+    SquashDones,
+    FlattenObservation
+]
+
+def make_one_env(env_name, env_configs, seed, rank = 0):
+    def _thunk():
+        if('FullCoopPredatorPreyWrapper' in env_name):
+            env = FullCoopPredatorPreyWrapper(centralized = False, grid_shape = (env_configs['grid_size'], env_configs['grid_size']),
+                    n_agents = env_configs['num_agents'],
+                    n_preys = env_configs['num_preys'],
+                    step_cost = env_configs['step_cost'],
+                    max_steps = env_configs['time_limit'],
+                    prey_capture_reward = env_configs['prey_capture_reward'],
+                    penalty = env_configs['penalty'],
+                    other_agent_visible= env_configs['other_agent_visible'],
+                    prey_move_probs = tuple(env_configs['prey_move_probs'])
+            )
+            env.seed(seed + rank)
+            for a_space in env.action_space:
+                a_space.seed(seed + rank)
+        elif('TrafficJunction' in env_name):
+            # Not using curriculum learning, so rate min equal to rate max
+            env = TrafficJunctionWrapper(
+                centralized = False,
+                dim = env_configs['dim'],
+                vision = env_configs['vision'],
+                add_rate_min = env_configs['add_rate_max'],
+                add_rate_max = env_configs['add_rate_max'],
+                curr_start = 0,
+                curr_end = 0,
+                difficulty = env_configs['difficulty'],
                 n_agents = env_configs['num_agents'],
-                n_preys = env_configs['num_preys'],
-                step_cost = env_configs['step_cost'],
-                max_steps = env_configs['time_limit'],
-                prey_capture_reward = env_configs['prey_capture_reward'],
-                penalty = env_configs['penalty'],
-                other_agent_visible= env_configs['other_agent_visible'],
-                prey_move_probs = tuple(env_configs['prey_move_probs'])
-        )
-        env.seed(seed)
-        for a_space in env.action_space:
-            a_space.seed(seed)
-    elif('TrafficJunction' in env_name):
-        # Not using curriculum learning, so rate min equal to rate max
-        env = TrafficJunctionWrapper(
-            centralized = False,
-            dim = env_configs['dim'],
-            vision = env_configs['vision'],
-            add_rate_min = env_configs['add_rate_max'],
-            add_rate_max = env_configs['add_rate_max'],
-            curr_start = 0,
-            curr_end = 0,
-            difficulty = env_configs['difficulty'],
-            n_agents = env_configs['num_agents'],
-            max_steps = env_configs['time_limit']
-        )
-        env.seed(seed)
-    else:
-        env = gym.make(env_name)
-        env.seed(seed)
-    return env
+                max_steps = env_configs['time_limit']
+            )
+            env.seed(seed + rank)
+        elif('Overcook' in env_name):
+            # env = OverCookedEnv(scenario = env_configs['env'], episode_length = env_configs['time_limit'])
+            # base_mdp = OvercookedGridworld.from_layout_name(env_configs['env'])
+            # env = OvercookedEnv.from_mdp(base_mdp, horizon = env_configs['time_limit'])
+
+            mdp = OvercookedGridworld.from_layout_name(env_configs['env'])
+            base_env = OvercookedEnv.from_mdp(mdp, horizon = env_configs['time_limit'])
+            config_dict = {'base_env' : base_env, 'featurize_fn' : base_env.featurize_state_mdp}
+            env = gym.make('Overcooked-v0', **config_dict)
+            # env = env.custom_init(base_env, base_env.featurize_state_mdp)
+            # print(env.observation_space.shape)
+            print("initialized overcook")
+        else:
+            env = gym.make(env_name)
+            env.seed(seed + rank)
+        env = TimeLimit(env, max_episode_steps = env_configs['time_limit'])
+        for wrapper in WRAPPERS:
+            env = wrapper(env)
+        return env
+    return _thunk
 
 
 class MADummyVecEnv(DummyVecEnv):
@@ -105,7 +132,7 @@ def make_env(env_id, env_configs, seed, rank, time_limit, wrappers, monitor_dir)
             env = TimeLimit(env, time_limit)
 
         # Remove the flatten observation wrapper
-        for wrapper in wrappers[: -1]  if('cifar' in env_id or 'MarlGrid' in env_id) else wrappers:
+        for wrapper in wrappers:
             env = wrapper(env)
 
         if monitor_dir:
@@ -134,6 +161,19 @@ def make_vec_envs(
     envs = VecPyTorch(envs, device, env_name)
     return envs
 
+
+def make_vec_envs_2(
+    env_name, env_configs, seed, num_parallel):
+    envs = [
+        make_one_env(env_name, env_configs, seed, i) for i in range(num_parallel)
+    ]
+
+    try:
+        envs = SubprocVecEnv(envs, start_method="fork")
+    except:
+        envs = SubprocVecEnv(envs, start_method="spawn")
+
+    return envs
 
 class VecPyTorch(VecEnvWrapper):
     def __init__(self, venv, device, env_name):
