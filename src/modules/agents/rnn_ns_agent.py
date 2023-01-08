@@ -34,3 +34,11 @@ class RNNNSAgent(nn.Module):
     def cuda(self, device="cuda:0"):
         for a in self.agents:
             a.cuda(device=device)
+
+    def reset(self, mode, agent_index = None):
+        # Reset all agents if no agent index
+        if(agent_index == None):
+            for a in self.agents:
+                a.reset(mode = mode)
+        else:
+            self.agents[i].reset(mode = mode)

@@ -27,4 +27,15 @@ class RNNAgent(nn.Module):
             h = F.relu(self.rnn(x))
         q = self.fc2(h)
         return q, h
+    
+    def reset(self, mode):
+        if(mode == 'last'):
+            torch.nn.init.xavier_uniform_(self.fc2.weight) 
+        elif(mode == 'full'):
+            torch.nn.init.xavier_uniform_(self.fc2.weight)
+            # If is still named rnn even if it is linear
+            torch.nn.init.xavier_uniform_(self.rnn.weight)
+            torch.nn.init.xavier_uniform_(self.fc1.weight)
+        else:
+            raise NotImplementedError() 
 

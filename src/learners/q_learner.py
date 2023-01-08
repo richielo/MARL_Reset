@@ -32,6 +32,13 @@ class QLearner:
         # a little wasteful to deepcopy (e.g. duplicates action selector), but should work for any MAC
         self.target_mac = copy.deepcopy(mac)
 
+
+        # reset parameters 
+        if(args.use_reset is not None):
+            if(args.use_reset):
+                self.reset_t = -self.args.reset_every - 1 
+                self.num_reset_done = 0
+
         self.training_steps = 0
         self.last_target_update_step = 0
         self.log_stats_t = -self.args.learner_log_interval - 1
@@ -135,6 +142,26 @@ class QLearner:
             self.logger.log_stat("q_taken_mean", (chosen_action_qvals * mask).sum().item()/(mask_elems * self.args.n_agents), t_env)
             self.logger.log_stat("target_mean", (targets * mask).sum().item()/(mask_elems * self.args.n_agents), t_env)
             self.log_stats_t = t_env
+
+        if(self.args.use_reset is not None):
+            if(self.args.use_reset):
+                ["mixer", "target_mixer", "agent", "target_agent"]
+                if(self.num_reset_done < self.args.num_resets and t_env - self.reset_t >= self.args.reset_every)
+                    for com_name in self.args.reset_components:
+                        if(com_name == 'mixer'):
+                            self.mixer.reset(mode = self.args.reset_mode) 
+                        elif(com_name == 'target_mixer'):
+                            self.target_mixer.reset(mode = self.args.reset_mode)  
+                        elif(com_name == 'agent'):
+                            self.mac.reset(mode = self.args.reset_mode) 
+                        elif(com_name == 'target_agent'):
+                            self.target_mac.reset(mode = self.args.reset_mode)  
+                        else:
+                            raise NotImplementedError()
+                    self.num_reset_done += 1
+                    self.reset_t = t_env
+
+                print("Reset done at t_env: {}".format(t_env))
 
     def _update_targets_hard(self):
         self.target_mac.load_state(self.mac)
