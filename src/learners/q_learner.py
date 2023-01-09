@@ -15,7 +15,6 @@ class QLearner:
 
         self.params = list(mac.parameters())
         self.last_target_update_episode = 0
-
         self.mixer = None
         if args.mixer is not None:
             if args.mixer == "vdn":
