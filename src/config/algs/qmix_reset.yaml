@@ -20,9 +20,10 @@ obs_last_action: False
 obs_individual_obs: False
 
 # reset parameters
-use_reset : True 
+use_reset : True
+reset_start: 400000
 reset_every : 600000
-num_resets : 6
+num_resets : 5
 reset_components : ["mixer", "target_mixer", "agent", "target_agent"]
 reset_mode : 'last'
 # the parameter below is not implemented and used since it is not used in the primacy bias paper (need to add offline updates to use this)
@@ -42,4 +43,4 @@ mixing_embed_dim: 32
 hypernet_layers: 2
 hypernet_embed: 64
 
-name: "qmix"
+name: "qmix_reset"
