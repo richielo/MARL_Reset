@@ -58,3 +58,37 @@ class QMixer(nn.Module):
         # Reshape and return
         q_tot = y.view(bs, -1, 1)
         return q_tot
+
+    def reset(self, mode):
+        # NOTE: Becasue of how qmix layers are structured
+        # last - lasy layers of each branch (i.e., w_1 and w_final) with biases
+        # full - everything  
+        if(mode == 'last'):
+            if getattr(args, "hypernet_layers", 1) == 1:
+                # With only one layer, this actually resets everything except for self.V which only its last layer is reset
+                torch.nn.init.xavier_uniform_(list(self.V.children())[-1].weight)
+                torch.nn.init.xavier_uniform_(self.hyper_b_1.weight)
+                torch.nn.init.xavier_uniform_(self.hyper_w_1.weight)
+                torch.nn.init.xavier_uniform_(self.hyper_w_final.weight)
+            elif getattr(args, "hypernet_layers", 1) == 2:
+                torch.nn.init.xavier_uniform_(list(self.V.children())[-1].weight)
+                torch.nn.init.xavier_uniform_(self.hyper_b_1.weight)
+                torch.nn.init.xavier_uniform_(list(self.hyper_w_1.children())[-1].weight)
+                torch.nn.init.xavier_uniform_(list(self.hyper_w_final.children())[-1].weight)
+        elif(mode == 'full'):
+            if getattr(args, "hypernet_layers", 1) == 1:
+                for layer in list(self.V.children()):
+                     torch.nn.init.xavier_uniform_(layer.weight)
+                torch.nn.init.xavier_uniform_(self.hyper_b_1.weight)
+                torch.nn.init.xavier_uniform_(self.hyper_w_1.weight)
+                torch.nn.init.xavier_uniform_(self.hyper_w_final.weight)
+            elif getattr(args, "hypernet_layers", 1) == 2:
+                for layer in list(self.V.children()):
+                     torch.nn.init.xavier_uniform_(layer.weight)
+                torch.nn.init.xavier_uniform_(self.hyper_b_1.weight)
+                for layer in list(self.hyper_w_1.children()):
+                     torch.nn.init.xavier_uniform_(layer.weight)
+                for layer in list(self.hyper_w_final.children()):
+                     torch.nn.init.xavier_uniform_(layer.weight)
+        else:
+            raise NotImplementedError() 
