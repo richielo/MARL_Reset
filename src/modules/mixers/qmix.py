@@ -78,17 +78,21 @@ class QMixer(nn.Module):
         elif(mode == 'full'):
             if getattr(self.args, "hypernet_layers", 1) == 1:
                 for layer in list(self.V.children()):
-                     th.nn.init.xavier_uniform_(layer.weight)
+                     if(hasattr(layer, 'weight')):
+                        th.nn.init.xavier_uniform_(layer.weight)
                 th.nn.init.xavier_uniform_(self.hyper_b_1.weight)
                 th.nn.init.xavier_uniform_(self.hyper_w_1.weight)
                 th.nn.init.xavier_uniform_(self.hyper_w_final.weight)
             elif getattr(self.args, "hypernet_layers", 1) == 2:
                 for layer in list(self.V.children()):
-                     th.nn.init.xavier_uniform_(layer.weight)
+                     if(hasattr(layer, 'weight')):
+                        th.nn.init.xavier_uniform_(layer.weight)
                 th.nn.init.xavier_uniform_(self.hyper_b_1.weight)
                 for layer in list(self.hyper_w_1.children()):
-                     th.nn.init.xavier_uniform_(layer.weight)
+                     if(hasattr(layer, 'weight')):
+                        th.nn.init.xavier_uniform_(layer.weight)
                 for layer in list(self.hyper_w_final.children()):
-                     th.nn.init.xavier_uniform_(layer.weight)
+                     if(hasattr(layer, 'weight')):
+                        th.nn.init.xavier_uniform_(layer.weight)
         else:
             raise NotImplementedError() 
